@@ -9,8 +9,12 @@ $auth_data = authenticate("SET ME", "SET ME");
 
 extract($auth_data);
 
-download("Backups", "test1", "file2.txt");
+// download("Backups", "test1", "file2.txt");
 
-list_container("Backups");
+delete("Backups", "test1", "file3.txt");
+
+// upload("Backups", "test1", ".gitignore");
+
+// list_container("Backups");
 
 ?>
