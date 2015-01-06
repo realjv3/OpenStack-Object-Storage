@@ -11,10 +11,12 @@ extract($auth_data);
 
 // download("Backups", "test1", "file2.txt");
 
-delete("Backups", "test1", "file3.txt");
+// delete("Backups", "test1", "file3.txt");
 
 // upload("Backups", "test1", ".gitignore");
 
 // list_container("Backups");
+
+filesplit("C:/users/john/downloads/X17-58996.iso", 350);
 
 ?>
