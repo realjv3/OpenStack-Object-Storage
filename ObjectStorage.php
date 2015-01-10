@@ -9,14 +9,14 @@ $auth_data = authenticate("SET ME", "SET ME");
 
 extract($auth_data);
 
-// download("Backups", "test1", "file2.txt");
+download("Backups", "test1", "pwhe8.exe");
 
-// delete("Backups", "test1", "file3.txt");
+// delete("Segments", "", "pwhe8.exe.002");
 
-// upload("Backups", "test1", ".gitignore");
+// filesplit("C:/users/john/downloads/pwhe8.exe", 10);
 
-// list_container("Backups");
+// segment_upload("Backups", "test1", "pwhe8.exe");
 
-filesplit("C:/users/john/downloads/X17-58996.iso", 350);
+// list_container("Segments");
 
 ?>

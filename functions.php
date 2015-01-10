@@ -56,14 +56,14 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 	if (!is_readable($file)) {
 		echo "$file is not readable.\n";
 	} else {			
-			$file_to_upload = fopen($file, "r");
+			$file_handle = fopen($file, "r");
 	}
 
 	$curl = curl_init("$x_storage_url/$container/$folder/$file");
 
 	$curl_options = array(
 			CURLOPT_PUT => 1,
-			CURLOPT_INFILE => $file_to_upload,
+			CURLOPT_INFILE => $file_handle,
 			CURLOPT_INFILESIZE => filesize($file),
 			CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
 			CURLOPT_SSL_VERIFYPEER => false,
@@ -79,69 +79,83 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 
 function segment_upload($container, $folder, $file) {
 /*
-Creation of a static large object is done in several steps. First we divide the content into pieces using filesplit function and upload each piece into a segment object. Then we create a manifest object. We will place the segment objects into the "segments" container and the manifest object into the "Backups" container.
-curl –X PUT -i -H "X-Auth-Token: 12345" -T ./piece1
-    https://$x_storage_url/segments/terrier-jpg-one
-curl –X PUT -i -H "X-Auth-Token: 12345" -T ./piece2
-    https://$x_storage_url/segments/terrier-jpg-two
-curl –X PUT -i -H "X-Auth-Token: 12345" -T ./piece3
-    https://$x_storage_url/segments/terrier-jpg-three
-
-We receive this kind http header back for each uploaded piece:
-HTTP/1.1 201 Created
-Content-Length: 1000
-Etag: 00b046c9d74c3e8f93b320c5e5fdc2c3
-
-Next create manifest listing, example manifest.json:
-    [
-        {
-            "path": "segments/terrier-jpg-one",
-            "etag": "f7365c1419b4f349592c00bd0cfb9b9a",
-            "size_bytes": 4000000
-        },
-        {
-            "path": "segments/terrier-jpg-two",
-            "etag": "ad81e97b10e870613aecb5ced52adbaa",
-            "size_bytes": 2000000
-        },
-            "path": "segments/terrier-jpg-three",
-            "etag": "00b046c9d74c3e8f93b320c5e5fdc2c3",
-            "size_bytes": 1000
-        {
-        }
-The final operation is to upload this content into a manifest object. To indicate that this is a manifest object, you need to specify the ?multipart-manifest=put query string.
-$ curl –X PUT -i -H "X-Auth-Token: 12345" -T ./manifest.json
-    https://storage.swiftdrive.com/v1/CF_xer7_343/images/terrier-jpg?multipart-manifest=put
-
+Pass in destination in Object Storage that file should be uploaded to.
+Creation of a static large object is done in several steps. First we divide the content into pieces using filesplit function and upload each piece into a segment object. Then we create a manifest object. We will place the segment objects into the "Segments" container and the manifest object into the "Images" container.
 */
 	
 	global $x_auth_token, $x_storage_url;
 
-	if (filesize($file) <= 4999999999) {
-		die("File size of $file less than 5GB, doesn't need to be split before uploading." . br());
+	$manifest_contents = "["; //starting manifest contents json, before the loop
+
+	$ext = 1;										//setting first segment file extension	
+	$ext = str_pad($ext, 3, "0", STR_PAD_LEFT);		//padding extension to the left with zeros
+	$file_uploading = $file . "." . $ext;			//adding extension to the file name, to be passed to fopen
+
+	while ($file_handle = @fopen($file_uploading, 'r')) { /*while there are segment files in this directory*/
+		
+		$curloutput = fopen('curloutput.txt', 'w+');	//curloutput.txt will contain http header responses we need for manifest creation
+
+		$curl = curl_init("$x_storage_url/Segments/$file_uploading");
+
+		$curl_options = array(						//uploading the file with http put, response goes into file
+				CURLOPT_PUT => 1,
+				CURLOPT_INFILE => $file_handle,
+				CURLOPT_INFILESIZE => filesize($file_uploading),
+				CURLOPT_HEADER => 1,
+				CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
+				CURLOPT_SSL_VERIFYPEER => false,
+				CURLOPT_FILE => $curloutput
+			);
+
+		curl_setopt_array($curl, $curl_options);
+
+		echo "Uploading $file_uploading.\n";
+
+		curl_exec($curl);
+
+		$size = curl_getinfo($curl, CURLINFO_SIZE_UPLOAD);	//getting uploaded bytes for use in manifest file
+
+		curl_close($curl);
+
+		//This section the json manifest file will be created for the uploaded segments
+		$contents = file_get_contents("curloutput.txt");
+		$a = explode(" ", $contents);	//exploding curl output into an array and getting the etag
+		$etag = substr($a[12], 0, 32);
+		$json_enc = array(	'path' => "Segments/$file_uploading",   
+							'etag' => "$etag",
+							'size_bytes'=> "$size");
+		$json_enc = json_encode($json_enc, JSON_UNESCAPED_SLASHES);		//encoding $json_enc into json array syntax		
+		$manifest_contents .= $json_enc . ",";							//then appending to manifest contents
+
+		$ext++;									//setup of next file to upload
+		$ext = str_pad($ext, 3, "0", STR_PAD_LEFT);
+		$file_uploading = $file . "." . $ext;
 	}
 
-	filesplit($file, 4900000000);
+	$manifest_contents = substr($manifest_contents, 0, -1);	//takes the last comma off of the manifest contents
+	$manifest_contents .= "]";								//appends "]" onto the end of manifest for json object syntax
+	file_put_contents("$file.json", $manifest_contents);
+	$manifest = fopen("$file.json", "r");
 
-	// $curl = curl_init("$x_storage_url/$container/$folder/$file");   FINISH THIS TOMORROW, NEED TO UPLOAD SEGMENTS & MANIFEST
+/*The final operation is to upload this content into a manifest object. To indicate that this is a manifest object, you need to specify the ?multipart-manifest=put query string. curl –X PUT -i -H "X-Auth-Token: 12345" -T ./manifest.json
+    https://storage.swiftdrive.com/v1/CF_xer7_343/images/terrier-jpg?multipart-manifest=put*/
+	$curl = curl_init("$x_storage_url/$container/$folder/$file?multipart-manifest=put");
 
-	// $curl_options = array(
-	// 		CURLOPT_PUT => 1,
-	// 		CURLOPT_INFILE => $file_to_upload,
-	// 		CURLOPT_INFILESIZE => filesize($file),
-	// 		CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
-	// 		CURLOPT_SSL_VERIFYPEER => false,
-	// 		CURLOPT_VERBOSE => 1
-	// 	);
+	$curl_options = array(
+			CURLOPT_PUT => 1,
+			CURLOPT_INFILE => $manifest,
+			CURLOPT_INFILESIZE => filesize("$file.json"),
+			CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
+			CURLOPT_SSL_VERIFYPEER => false,
+			CURLOPT_VERBOSE => 1
+		);
 
-	// curl_setopt_array($curl, $curl_options);
+	curl_setopt_array($curl, $curl_options);
 
-	// curl_exec($curl);
+	curl_exec($curl);
 
-	// curl_close($curl);
-
-
-}
+	curl_close($curl);
+}	
 
 function download($container, $folder, $file) {
 /*
@@ -177,14 +191,20 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 
 function delete($container, $folder, $file) {
 /*
-Delete a file from object storage:
+Delete a file from object storage. Pass $container and $file, $folder should be empty string incase there's no folder.
 Send a http DELETE request to $x_storage_url/$container/$folder/$file.
 Send the custom http header "X-Auth-Token: $x_auth_token" along with the DELETE request.
 */
 
 	global $x_auth_token, $x_storage_url;
 
-	$curl = curl_init("$x_storage_url/$container/$folder/$file");
+	if ($folder != "") {					//if statement checks to see if folder is empty string or not
+		$url = "$x_storage_url/$container/$folder/$file";
+	} else {
+		$url = "$x_storage_url/$container/$file";
+	}
+
+	$curl = curl_init($url);
 
 	$curl_options = array(
 			CURLOPT_CUSTOMREQUEST => "DELETE",
@@ -217,7 +237,12 @@ function list_container($container) {
 
 	curl_exec($curl);
 
+	if (curl_getinfo($curl, CURLINFO_HTTP_CODE) == 204) {
+		echo "Container is empty.\n";
+	}
+
 	curl_close($curl);
+
 }
 
 function filesplit($filename, $piecesize) {
@@ -232,7 +257,7 @@ $piecesize = File size in Mb per piece/split.
 	$current = 0;
 	$splitnum = 1;
 
-	if(!$handle = fopen($filename, "rb")) {			//tries to open file and return a handle
+	if(!$handle = fopen($filename, "r")) {			//tries to open file and return a handle
 		die("Unable to open $filename for read!" . br());
 	}
 
