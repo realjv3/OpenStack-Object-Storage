@@ -28,14 +28,15 @@ array_shift($dir_contents);
 
 while ($dir_contents) {
 	$current_file = array_shift($dir_contents);
-	echo "Uploading $current_file.\n";
-	$filesize = shell_exec('for %I in (' . $current_file . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
+	
+	$filesize = shell_exec('for %I in (' . "D:/$current_file" . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
 
-	if ($filesize < 5000000000) {
-		if (filemtime($current_file) >= (time() - 100000) ) {
+	if ($filesize < 5000000000) {									//if filesize less than 5GB
+		if (filemtime("D:/$current_file") >= (time() - 86400) ) {	//if file modified within last 24 hours
+			echo "Uploading $current_file.\n";
 			upload("Backups", "test1", "$current_file");
 		}
-	} else {
+	} else if ($filesize > 5000000000 AND filemtime("D:/$current_file") >= (time() - 86400)){
 		$big_files[] = $current_file;
 	}
 }
@@ -50,10 +51,12 @@ while ($big_files) {
 
 //delete segment & manifest files from local storage
 
-$dir = opendir("C:/test");
+$dir = opendir(".");
+
 while ($file = readdir($dir)) {
-	if (fnmatch("$file", "*.*.*") or fnmatch("$file", "*.json")) {
-		unlink("$file");
+	if (fnmatch("*.*.*", "$file") or fnmatch("*.json", "$file")) {
+		@unlink("$file");
+		echo "$file deleted from local storage.\n";
 	}
 }
 closedir();

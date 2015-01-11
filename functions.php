@@ -66,12 +66,17 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 			CURLOPT_INFILESIZE => $filesize,
 			CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
 			CURLOPT_SSL_VERIFYPEER => false,
-			CURLOPT_VERBOSE => 1
 		);
 
 	curl_setopt_array($curl, $curl_options);
 
 	curl_exec($curl);
+
+	if ($error = curl_error($curl)) {
+		echo "$error\n";
+	} else {
+		echo "Uploaded $file ok.\n";
+	}
 
 	curl_close($curl);
 }
@@ -112,14 +117,19 @@ Creation of a static large object is done in several steps. First we divide the 
 
 		curl_exec($curl);
 
+		if ($error = curl_error($curl)) {
+			echo "$error\n";
+		} else {
+			echo "Uploaded $file_uploading ok.\n";
+		}
 		$size = curl_getinfo($curl, CURLINFO_SIZE_UPLOAD);	//getting uploaded bytes for use in manifest file
 
 		curl_close($curl);
 
 //This section the json manifest file will be created for the uploaded segments
-		$contents = file_get_contents("curloutput.txt");
-		$a = explode(" ", $contents);	//exploding curl output into an array and getting the etag
-		$etag = substr($a[12], 0, 32);
+		$httpheader = file_get_contents("curloutput.txt");
+		$httpheader = explode("\r\n", $httpheader);	//exploding curl output into an array and getting the etag
+		$etag = substr($httpheader[3], 6);
 		$json_enc = array(	'path' => "Segments/$file_uploading",   
 							'etag' => "$etag",
 							'size_bytes'=> "$size");
@@ -145,13 +155,16 @@ Creation of a static large object is done in several steps. First we divide the 
 			CURLOPT_INFILESIZE => filesize("$file.json"),
 			CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
 			CURLOPT_SSL_VERIFYPEER => false,
-			CURLOPT_VERBOSE => 1
 		);
 
 	curl_setopt_array($curl, $curl_options);
 
 	curl_exec($curl);
-
+	if ($error = curl_error($curl)) {
+		echo "$error\n";
+	} else {
+		echo "Uploaded $file.json ok.\n";
+	}
 	curl_close($curl);
 }	
 
