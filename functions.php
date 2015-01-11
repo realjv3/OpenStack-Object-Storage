@@ -30,8 +30,9 @@ set cUrl to output http header, set cUrl to output to string instead of stdout;
 Get the API token and url from the returned http header and store them in vars to use in future operations
 */
 
-	$x_auth_token = substr($curl_result, 81, 39);
-	$x_storage_url = substr($curl_result, 195, 86);
+	$curl_result = explode(" ", $curl_result);
+	$x_auth_token = substr($curl_result[5], 0, -18);
+	$x_storage_url = substr($curl_result[7], 0, -15);
 
 	return array(
 		"x_auth_token" => $x_auth_token, 
@@ -49,22 +50,20 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 
 	global $x_auth_token, $x_storage_url;
 
-	if (filesize($file) >= 4999999999) {
-		die("File size of $file exceeds 5GB, must be split into smaller pieces before uploading." . br());
-	}
-
 	if (!is_readable($file)) {
 		echo "$file is not readable.\n";
 	} else {			
 			$file_handle = fopen($file, "r");
 	}
+	
+	$filesize = shell_exec('for %I in (' . $file . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
 
 	$curl = curl_init("$x_storage_url/$container/$folder/$file");
 
 	$curl_options = array(
 			CURLOPT_PUT => 1,
 			CURLOPT_INFILE => $file_handle,
-			CURLOPT_INFILESIZE => filesize($file),
+			CURLOPT_INFILESIZE => $filesize,
 			CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
 			CURLOPT_SSL_VERIFYPEER => false,
 			CURLOPT_VERBOSE => 1
@@ -117,7 +116,7 @@ Creation of a static large object is done in several steps. First we divide the 
 
 		curl_close($curl);
 
-		//This section the json manifest file will be created for the uploaded segments
+//This section the json manifest file will be created for the uploaded segments
 		$contents = file_get_contents("curloutput.txt");
 		$a = explode(" ", $contents);	//exploding curl output into an array and getting the etag
 		$etag = substr($a[12], 0, 32);
@@ -127,7 +126,7 @@ Creation of a static large object is done in several steps. First we divide the 
 		$json_enc = json_encode($json_enc, JSON_UNESCAPED_SLASHES);		//encoding $json_enc into json array syntax		
 		$manifest_contents .= $json_enc . ",";							//then appending to manifest contents
 
-		$ext++;									//setup of next file to upload
+		$ext++;									//setup of next filename to upload
 		$ext = str_pad($ext, 3, "0", STR_PAD_LEFT);
 		$file_uploading = $file . "." . $ext;
 	}
@@ -137,8 +136,7 @@ Creation of a static large object is done in several steps. First we divide the 
 	file_put_contents("$file.json", $manifest_contents);
 	$manifest = fopen("$file.json", "r");
 
-/*The final operation is to upload this content into a manifest object. To indicate that this is a manifest object, you need to specify the ?multipart-manifest=put query string. curl –X PUT -i -H "X-Auth-Token: 12345" -T ./manifest.json
-    https://storage.swiftdrive.com/v1/CF_xer7_343/images/terrier-jpg?multipart-manifest=put*/
+//The final operation is to upload this content into a manifest object. To indicate that this is a manifest object, you need to specify the ?multipart-manifest=put query string.
 	$curl = curl_init("$x_storage_url/$container/$folder/$file?multipart-manifest=put");
 
 	$curl_options = array(
