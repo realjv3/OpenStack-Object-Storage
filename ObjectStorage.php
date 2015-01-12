@@ -43,23 +43,27 @@ while ($dir_contents) {
 
 //split files larger than 5GB into 4.9GB segments, upload segments and manifest
 
-while ($big_files) {
-	$current_file = array_shift($big_files);
-	filesplit("C:/test/$current_file", 4900);
-	segment_upload("Backups", "test1", "$current_file");
-}
+if ($big_files) {
 
-//delete segment & manifest files from local storage
-
-$dir = opendir(".");
-
-while ($file = readdir($dir)) {
-	if (fnmatch("*.*.*", "$file") or fnmatch("*.json", "$file")) {
-		@unlink("$file");
-		echo "$file deleted from local storage.\n";
+	while ($big_files) {
+		$current_file = array_shift($big_files);
+		filesplit("D:/$current_file", 4900);
+		segment_upload("Backups", "Images1", "$current_file");
 	}
+
+//cleanup: delete segment & manifest files from local directory
+
+	$dir = opendir(".");
+	while ($file = readdir($dir)) {
+		if (fnmatch("*.*.*", "$file") or fnmatch("*.json", "$file")) {
+			@unlink("$file");
+			echo "$file deleted from local storage.\n";
+		}
+	}
+	closedir();
+} else {
+	echo "No big files.\n";
 }
-closedir();
 // delete("Backups", "test1", "ObjectStorage.php");
 // delete("Backups", "test1", "curloutput.txt");
 // delete("Backups", "test1", "functions.php");
