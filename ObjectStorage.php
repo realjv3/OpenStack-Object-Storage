@@ -13,13 +13,12 @@ extract($auth_data);
 
 /*
 This section is setup to meet my specific needs, which are to copy daily backups to Object Storage and do some cleanup.
-1.) upload files < 5GB, modified within last 16 hours to Object Storage
+1.) upload files < 5GB, modified within last 6 hours to Object Storage
 2.) split files larger than 5GB into 4.9GB segments, upload segments and manifest
 3.) delete segment & manifest files from local directory
 */
 
-
-$dir_contents = scandir(".");	//reads contents of current directory into array
+$dir_contents = scandir("C:/Users/John/Downloads");	//reads contents of current directory into array
 array_shift($dir_contents);		//removes the . and the .. elements from beginning of array
 array_shift($dir_contents);
 
@@ -28,17 +27,19 @@ array_shift($dir_contents);
 while ($dir_contents) {
 	$current_file = array_shift($dir_contents);
 	
-	$filesize = shell_exec('for %I in (' . "D:/$current_file" . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
+	$filesize = shell_exec('for %I in (' . "C:/Users/John/Downloads/$current_file" . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
 
 	if ($filesize < 5000000000) {									//if filesize less than 5GB
-		if (filemtime("D:/$current_file") >= (time() - 57600) ) {	//if file modified within last 16 hours
+		if (filemtime("C:/Users/John/Downloads/$current_file") >= (time() - 21600) ) {	//if file modified within last 6 hours
+			$little_files[] = $current_file;
 			echo "Uploading $current_file.\n";
 			upload("Backups", "test1", "$current_file");
 		}
-	} else if ($filesize > 5000000000 AND filemtime("D:/$current_file") >= (time() - 57600)){
+	} else if ($filesize > 5000000000 AND filemtime("C:/Users/John/Downloads/$current_file") >= (time() - 21600)){
 		$big_files[] = $current_file;
 	}
 }
+if (@!$little_files) {die("No recent files to upload.\n");}
 
 //split files larger than 5GB into 4.9GB segments, upload segments and manifest
 
@@ -46,7 +47,7 @@ if ($big_files) {
 
 	while ($big_files) {
 		$current_file = array_shift($big_files);
-		filesplit("D:/$current_file", 4900);
+		filesplit("C:/Users/John/Downloads/$current_file", 4900);
 		segment_upload("Backups", "Images1", "$current_file");
 	}
 
@@ -61,7 +62,7 @@ if ($big_files) {
 	}
 	closedir();
 } else {
-	echo "No big files.\n";
+	echo "No recent big files to upload.\n";
 }
 
 ?>
