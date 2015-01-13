@@ -96,7 +96,9 @@ Creation of a static large object is done in several steps. First we divide the 
 	$file_uploading = $file . "." . $ext;			//adding extension to the file name, to be passed to fopen
 
 	while ($file_handle = @fopen($file_uploading, 'r')) { /*while there are segment files in this directory*/
-		
+
+		$filesize = shell_exec('for %I in (' . $file_uploading . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
+
 		$curloutput = fopen('curloutput.txt', 'w+');	//curloutput.txt will contain http header responses we need for manifest creation
 
 		$curl = curl_init("$x_storage_url/Segments/$file_uploading");
@@ -104,7 +106,7 @@ Creation of a static large object is done in several steps. First we divide the 
 		$curl_options = array(						//uploading the file with http put, response goes into file
 				CURLOPT_PUT => 1,
 				CURLOPT_INFILE => $file_handle,
-				CURLOPT_INFILESIZE => filesize($file_uploading),
+				CURLOPT_INFILESIZE => "$filesize",
 				CURLOPT_HEADER => 1,
 				CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
 				CURLOPT_SSL_VERIFYPEER => false,
@@ -200,34 +202,31 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 	}
 }
 
-function delete($container, $folder, $file) {
+function delete($container, $file) {
 /*
-Delete a file from object storage. Pass $container and $file, $folder should be empty string incase there's no folder.
+Delete a file from object storage. Pass $container and folder\$file
 Send a http DELETE request to $x_storage_url/$container/$folder/$file.
 Send the custom http header "X-Auth-Token: $x_auth_token" along with the DELETE request.
 */
 
 	global $x_auth_token, $x_storage_url;
 
-	if ($folder != "") {					//if statement checks to see if folder is empty string or not
-		$url = "$x_storage_url/$container/$folder/$file";
-	} else {
-		$url = "$x_storage_url/$container/$file";
-	}
-
-	$curl = curl_init($url);
+	$curl = curl_init("$x_storage_url/$container/$file");
 
 	$curl_options = array(
 			CURLOPT_CUSTOMREQUEST => "DELETE",
 			CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
-			CURLOPT_SSL_VERIFYPEER => false,
-			CURLOPT_VERBOSE => 1
+			CURLOPT_SSL_VERIFYPEER => false
 		);
 
 	curl_setopt_array($curl, $curl_options);
 
 	curl_exec($curl);
-
+	if ($error = curl_error($curl)) {
+		echo "$error\n";
+	} else {
+		echo "Deleted $file.\n";
+	}
 	curl_close($curl);
 }
 
