@@ -40,9 +40,9 @@ Get the API token and url from the returned http header and store them in vars t
 	);
 }
 
-function upload($container, $folder, $file) {
+function upload($container, $folder, $file_array) {
 /*
-Upload a file to object storage:
+Upload an array of files to object storage:
 Send an http PUT request $x_storage_url/$container/$folder/$file. 
 fopen file that the transfer should be read from when uploading and give reference to cUrl. Give anticipated uploaded bytes to cUrl.
 Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Auth-Token: $x_auth_token" along with the PUT request.
@@ -50,40 +50,48 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 
 	global $x_auth_token, $x_storage_url;
 
-	if (!is_readable($file)) {
-		echo "$file is not readable.\n";
-	} else {			
-			$file_handle = fopen($file, "r");
-	}
-	
-	$filesize = shell_exec('for %I in (' . $file . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
+	$mh = curl_multi_init();	//creating cUrl multi handle;
 
-	$curl = curl_init("$x_storage_url/$container/$folder/$file");
+	foreach ($file_array as $key => $fname) {
+		$file_handle = fopen("$fname", 'r');
+		${'f' . $key} = curl_init("$x_storage_url/$container/$folder/$fname"); //using variable varible so each cUrl handle is stored in a unique varible;
+		$curl_options = array(
+				CURLOPT_PUT => 1,
+				CURLOPT_INFILE => $file_handle,
+				CURLOPT_INFILESIZE => filesize("$fname"),
+				CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
+				CURLOPT_SSL_VERIFYPEER => false,
+			);
 
-	$curl_options = array(
-			CURLOPT_PUT => 1,
-			CURLOPT_INFILE => $file_handle,
-			CURLOPT_INFILESIZE => $filesize,
-			CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
-			CURLOPT_SSL_VERIFYPEER => false,
-		);
+		curl_setopt_array(${'f' . $key}, $curl_options);
 
-	curl_setopt_array($curl, $curl_options);
-
-	curl_exec($curl);
-
-	if ($error = curl_error($curl)) {
-		echo "$error\n";
-	} else {
-		echo "Uploaded $file ok.\n";
+		curl_multi_add_handle($mh, ${'f' . $key}); //adding cUrl handle to multi handle
 	}
 
-	curl_close($curl);
+	$active = null;
+
+	do  { 								//executing cUrl multi handle until no more active files;
+		curl_multi_exec($mh, $active);
+		echo "$active files are still uploading.\n";
+		sleep(3);
+	} while ($active > 0);
+
+	foreach ($file_array as $key => $fname) { //this loop outputs result of each uploaded file
+		$httpcode = curl_getinfo(${'f' . $key}, CURLINFO_HTTP_CODE)."\n";
+		if ($httpcode == 201) {
+			echo "$fname uploaded ok.\n";
+		} else {
+			echo "There was a problem with $fname upload - http code $httpcode";
+		}
+	}
+
+	curl_multi_close($mh);
 }
 
-function segment_upload($container, $folder, $file) {
+function big_file_upload($container, $folder, $segments_array) {
 /*
-Pass in destination in Object Storage that file should be uploaded to.
+For uploading files > 5GB in segements (made by filesplit()) with a json manifest.
+Pass in destination in Object Storage that file should be uploaded to, along with array of segments to be uploaded.
 Creation of a static large object is done in several steps. First we divide the content into pieces using filesplit function and upload each piece into a segment object. Then we create a manifest object. We will place the segment objects into the "Segments" container and the manifest object into the "Images" container.
 */
 	
@@ -91,70 +99,84 @@ Creation of a static large object is done in several steps. First we divide the 
 
 	$manifest_contents = "["; //starting manifest contents json, before the loop
 
-	$ext = 1;										//setting first segment file extension	
-	$ext = str_pad($ext, 3, "0", STR_PAD_LEFT);		//padding extension to the left with zeros
-	$file_uploading = $file . "." . $ext;			//adding extension to the file name, to be passed to fopen
+	$mh = curl_multi_init();	//creating cUrl multi handle;
 
-	while ($file_handle = @fopen($file_uploading, 'r')) { /*while there are segment files in this directory*/
-
-		$filesize = shell_exec('for %I in (' . $file_uploading . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
-
-		$curloutput = fopen('curloutput.txt', 'w+');	//curloutput.txt will contain http header responses we need for manifest creation
-
-		$curl = curl_init("$x_storage_url/Segments/$file_uploading");
-
-		$curl_options = array(						//uploading the file with http put, response goes into file
+	foreach ($segments_array as $key => $fname) {
+		$file_handle = fopen("$fname", 'r');
+		$filesize = shell_exec('for %I in (' . $fname . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
+		${'f' . $key} = curl_init("$x_storage_url/Segments/$fname"); //using variable varible so each cUrl handle is stored in a unique varible;
+		$curloutput = fopen("curloutput$key.txt", 'w+');	//curloutput.txt will contain http header responses we need for manifest creation
+		$curl_options = array(
 				CURLOPT_PUT => 1,
 				CURLOPT_INFILE => $file_handle,
-				CURLOPT_INFILESIZE => "$filesize",
-				CURLOPT_HEADER => 1,
+				CURLOPT_INFILESIZE => $filesize,
 				CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
 				CURLOPT_SSL_VERIFYPEER => false,
+				CURLOPT_HEADER => 1,
 				CURLOPT_FILE => $curloutput
 			);
 
-		curl_setopt_array($curl, $curl_options);
+		curl_setopt_array(${'f' . $key}, $curl_options);
 
-		echo "Uploading $file_uploading.\n";
-
-		curl_exec($curl);
-
-		if ($error = curl_error($curl)) {
-			echo "$error\n";
-		} else {
-			echo "Uploaded $file_uploading ok.\n";
-		}
-		$size = curl_getinfo($curl, CURLINFO_SIZE_UPLOAD);	//getting uploaded bytes for use in manifest file
-
-		curl_close($curl);
-
-//This section the json manifest file will be created for the uploaded segments
-		$httpheader = file_get_contents("curloutput.txt");
-		$httpheader = explode("\r\n", $httpheader);	//exploding curl output into an array and getting the etag
-		$etag = substr($httpheader[3], 6);
-		$json_enc = array(	'path' => "Segments/$file_uploading",   
-							'etag' => "$etag",
-							'size_bytes'=> "$size");
-		$json_enc = json_encode($json_enc, JSON_UNESCAPED_SLASHES);		//encoding $json_enc into json array syntax		
-		$manifest_contents .= $json_enc . ",";							//then appending to manifest contents
-
-		$ext++;									//setup of next filename to upload
-		$ext = str_pad($ext, 3, "0", STR_PAD_LEFT);
-		$file_uploading = $file . "." . $ext;
+		curl_multi_add_handle($mh, ${'f' . $key}); //adding cUrl handle to multi handle
 	}
+//executing cUrl multi handle until no more active files;	
+	$active = null;
 
-	$manifest_contents = substr($manifest_contents, 0, -1);	//takes the last comma off of the manifest contents
-	$manifest_contents .= "]";								//appends "]" onto the end of manifest for json object syntax
-	file_put_contents("$file.json", $manifest_contents);
-	$manifest = fopen("$file.json", "r");
+	do  {
+		curl_multi_exec($mh, $active);
+		echo "$active files are still uploading.\n";
+		sleep(3);
+	} while ($active > 0);
+
+	fclose($curloutput);
+
+//This section will output upload results and the json manifest file will be created for the uploaded segments
+	foreach ($segments_array as $key => $fname) { 
+
+			$httpcode = curl_getinfo(${'f' . $key}, CURLINFO_HTTP_CODE)."\n";	//getting http response for each upload from a file
+			
+			if ($httpcode == 201) {
+
+				echo "$fname uploaded ok.\n";
+
+				$size = curl_getinfo(${'f' . $key}, CURLINFO_SIZE_UPLOAD);	//getting uploaded bytes for use in manifest file
+
+				curl_multi_remove_handle($mh, ${'f' . $key}); //removing curl handle from multi curl handle
+				curl_close(${'f' . $key}); //closing the removed curl handle
+
+				$httpheader = file_get_contents("curloutput$key.txt");
+				$etag = substr($httpheader, stripos($httpheader, "etag: "), 38);
+				$etag = substr($etag, 6);	//getting 'etag' out of that array, need it for manifest
+
+				$json_enc = array(	'path' => "Segments/$segments_array[$key]",   
+									'size_bytes'=> "$size",
+									'etag' => "$etag"
+								);
+				$json_enc = json_encode($json_enc, JSON_UNESCAPED_SLASHES);		//encoding $json_enc into json array syntax		
+				$manifest_contents .= $json_enc . ",";						//then appending to manifest contents
+
+			} else {
+				die("There was a problem with $fname upload - http code $httpcode");
+			}
+		}
+	curl_multi_close($mh); //closing multihandle, done with uploads and results
+
+
+	$manifest_contents = substr($manifest_contents, 0, -1); //takes the comma off of end of the manifest contents
+
+	$manifest_contents .= ']';
+	$manifest_file = substr("$segments_array[0]", 0, -4) . ".json";
+	file_put_contents($manifest_file, $manifest_contents);
+	$manifest = fopen("$manifest_file", "r");
 
 //The final operation is to upload this content into a manifest object. To indicate that this is a manifest object, you need to specify the ?multipart-manifest=put query string.
-	$curl = curl_init("$x_storage_url/$container/$folder/$file?multipart-manifest=put");
+	$curl = curl_init("$x_storage_url/$container/$folder/$manifest_file?multipart-manifest=put");
 
 	$curl_options = array(
 			CURLOPT_PUT => 1,
 			CURLOPT_INFILE => $manifest,
-			CURLOPT_INFILESIZE => filesize("$file.json"),
+			CURLOPT_INFILESIZE => filesize("$manifest_file"),
 			CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
 			CURLOPT_SSL_VERIFYPEER => false,
 		);
@@ -165,7 +187,7 @@ Creation of a static large object is done in several steps. First we divide the 
 	if ($error = curl_error($curl)) {
 		echo "$error\n";
 	} else {
-		echo "Uploaded $file.json ok.\n";
+		echo "Uploaded $segments_array[0].json ok.\n";
 	}
 	curl_close($curl);
 }	
