@@ -25,7 +25,6 @@ if (curl_getinfo($curl, CURLINFO_HTTP_CODE) == 204) {
 
 curl_close($curl);
 
-file_put_contents('test', $dir_contents);
 $dir_contents = explode("\n", $dir_contents);
 array_shift($dir_contents); //removing Images1 element
 array_pop($dir_contents);	//removing blank element
