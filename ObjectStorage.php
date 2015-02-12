@@ -32,7 +32,6 @@ while ($dir_contents) {
 	if ($filesize < 5000000000) {									//if filesize less than 5GB
 		if (filemtime("D:/$current_file") >= (time() - 86400) ) {	//if file modified within last 24 hours
 			$little_files[] = $current_file;
-			echo "Uploading $current_file.\n";
 			upload("Backups", "Images1", "$current_file");
 		}
 	} else if ($filesize > 5000000000 AND filemtime("D:/$current_file") >= (time() - 86400)){

@@ -4,6 +4,32 @@ function br() {
 	return (!empty($_SERVER['SERVER_SOFTWARE']))?'<br>':"\n";
 }
 
+function upload_progress($curl, $download_size, $downloaded, $upload_size, $uploaded)	{
+/*This is a callback function for cUrl to display upload progress
+echos percentage rounded to 2 decimals,
+pads string to the left with up to 16 spaces b/c 16 is the max size for the string
+ending echo in \r so that cursor gets returned to the beginning of the line and overwrites string from a second ago*/
+
+    if($upload_size > 0) {
+        echo str_pad(round($uploaded / $upload_size  * 100, 2) . "% uploaded", 16, ' ', STR_PAD_LEFT) . "\r";
+	    ob_flush();
+	    flush();
+	}
+}
+
+function download_progress($resource, $download_size, $downloaded, $upload_size, $uploaded)	{
+/*This is a callback function for cUrl to display upload progress
+echos percentage rounded to 2 decimals,
+pads string to the left with up to 16 spaces b/c 16 is the max size for the string
+ending echo in \r so that cursor gets returned to the beginning of the line and overwrites string from a second ago*/
+
+    if($upload_size > 0) {
+        echo str_pad(round($downloaded / $download_size  * 100, 2) . "% uploaded", 16, ' ', STR_PAD_LEFT) . "\r";
+	    ob_flush();
+	    flush();
+	}
+}
+
 function authenticate($username, $password) {
 /*
 Use cUrl to get API token and a URL that contains to full path to object storage account. 
@@ -11,7 +37,7 @@ cUrl options set: public url to connect to, custom http headers to send (usernam
 set cUrl to accept any SSL server (SSL probz), 
 set cUrl to output http header, set cUrl to output to string instead of stdout;
 */
-	$curl = curl_init("https://dal05.objectstorage.service.networklayer.com/auth/v1.0/");
+	$curl = curl_init("https://dal05.objectstorage.softlayer.net/auth/v1.0/");
 
 	$curl_options = array (
 		CURLOPT_HTTPHEADER => array("X-Auth-User: $username", "X-Auth-Key: $password"),
@@ -50,6 +76,8 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 
 	global $x_auth_token, $x_storage_url;
 
+	ob_start(); //using output buffer for the progress function to work
+
 	if (!is_readable("D:/$file")) {
 		echo "$file is not readable.\n";
 	} else {			
@@ -57,6 +85,7 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 	}
 	
 	$filesize = shell_exec('for %I in (D:/' . $file . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
+	$filesize = substr($filesize, 0, -1);	//removing line break from end of string
 
 	$curl = curl_init("$x_storage_url/$container/$folder/$file");
 
@@ -65,11 +94,22 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 			CURLOPT_INFILE => $file_handle,
 			CURLOPT_INFILESIZE => $filesize,
 			CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token", "Content-Length: $filesize"),
-			CURLOPT_SSL_VERIFYPEER => false
+			CURLOPT_SSL_VERIFYPEER => false,
+			CURLOPT_PROGRESSFUNCTION => 'upload_progress',
+			CURLOPT_NOPROGRESS => 0
 		);
 
 	curl_setopt_array($curl, $curl_options);
-	
+
+	if ($filesize >= 1024 AND $filesize < 1048576) {		
+		$filesize = round(($filesize / 1024), 2) . " KB";	//converting bytes to kilobytes for output
+	}
+
+	if ($filesize >= 1048576) {
+		$filesize = round(($filesize / 1048576), 2) . " MB"; //converting bytes to megabytes for output
+	}
+
+	echo "Uploading $file - $filesize.\n";
 	curl_exec($curl);
 
 	$time = curl_getinfo($curl, CURLINFO_TOTAL_TIME);
@@ -83,6 +123,7 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 	}
 
 	curl_close($curl);
+	ob_end_clean();
 }
 
 function segment_upload($container, $folder, $file) {
@@ -96,19 +137,22 @@ Then we create a manifest object. We will place the segment objects into the "Se
 	
 	global $x_auth_token, $x_storage_url;
 
+	ob_start();	//using output buffer for the progress function to work
+
 	$manifest_contents = "["; //starting manifest contents json, before the loop
 
 	$ext = 1;										//setting first segment file extension	
 	$ext = str_pad($ext, 3, "0", STR_PAD_LEFT);		//padding extension to the left with zeros
-	$file_uploading = $file . "." . $ext;			//adding extension to the file name, to be passed to fopen
+	$segment = $file . "." . $ext;			//adding extension to the file name, to be passed to fopen
 
-	while ($file_handle = @fopen($file_uploading, 'r')) { /*while there are segment files in this directory*/
+	while ($file_handle = @fopen($segment, 'r')) { /*while there are segment files in this directory*/
 
-		$filesize = shell_exec('for %I in (' . $file_uploading . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
-
+		$filesize = shell_exec('for %I in (' . $segment . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
+		$filesize = substr($filesize, 0, -1);	//removing line break from end of string
+	
 		$curloutput = fopen('curloutput.txt', 'w+');	//curloutput.txt will contain http header responses we need for manifest creation
 
-		$curl = curl_init("$x_storage_url/Segments/$file_uploading");
+		$curl = curl_init("$x_storage_url/Segments/$segment");
 
 		$curl_options = array(						//uploading the file with http put, response goes into file
 				CURLOPT_PUT => 1,
@@ -117,13 +161,22 @@ Then we create a manifest object. We will place the segment objects into the "Se
 				CURLOPT_HEADER => 1,
 				CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token", "Content-Length: $filesize"),
 				CURLOPT_SSL_VERIFYPEER => false,
-				CURLOPT_FILE => $curloutput
+				CURLOPT_FILE => $curloutput,
+				CURLOPT_PROGRESSFUNCTION => 'upload_progress',
+				CURLOPT_NOPROGRESS => 0
 			);
 
 		curl_setopt_array($curl, $curl_options);
+		
+		if ($filesize >= 1024 AND $filesize < 1048576) {		
+			$filesize = round(($filesize / 1024), 2) . " KB";	//converting bytes to kilobytes for output
+		}
 
-		echo "Uploading $file_uploading.\n";
+		if ($filesize >= 1048576) {
+			$filesize = round(($filesize / 1048576), 2) . " MB"; //converting bytes to megabytes for output
+		}
 
+		echo "Uploading $segment - $filesize.\n";
 		curl_exec($curl);
 
 		$time = curl_getinfo($curl, CURLINFO_TOTAL_TIME);
@@ -131,9 +184,9 @@ Then we create a manifest object. We will place the segment objects into the "Se
 		$http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 		$size = curl_getinfo($curl, CURLINFO_SIZE_UPLOAD);	//getting uploaded bytes for use in manifest file	
 		if ( $http_code == 201) {
-			echo "Uploaded $file_uploading ok. Uploaded $size bytes in $min minutes.\n";
+			echo "Uploaded $segment ok. Uploaded $size bytes in $min minutes.\n";
 		} else {
-			echo "There was a problem uploading $file_uploading, HTTP code $http_code.\n";
+			echo "There was a problem uploading $segment, HTTP code $http_code.\n";
 		}
 		
 		fclose($curloutput);
@@ -143,7 +196,7 @@ Then we create a manifest object. We will place the segment objects into the "Se
 		$httpheader = file_get_contents("curloutput.txt");
 		$httpheader = explode("\r\n", $httpheader);	//exploding curl output into an array and getting the etag
 		$etag = substr($httpheader[3], 6);
-		$json_enc = array(	'path' => "Segments/$file_uploading",   
+		$json_enc = array(	'path' => "Segments/$segment",   
 							'etag' => "$etag",
 							'size_bytes'=> "$size");
 		$json_enc = json_encode($json_enc, JSON_UNESCAPED_SLASHES);		//encoding $json_enc into json array syntax		
@@ -151,7 +204,7 @@ Then we create a manifest object. We will place the segment objects into the "Se
 
 		$ext++;									//setup of next filename to upload
 		$ext = str_pad($ext, 3, "0", STR_PAD_LEFT);
-		$file_uploading = $file . "." . $ext;
+		$segment = $file . "." . $ext;
 	}
 
 	$manifest_contents = substr($manifest_contents, 0, -1);	//takes the last comma off of the manifest contents
@@ -179,7 +232,112 @@ Then we create a manifest object. We will place the segment objects into the "Se
 		echo "Uploaded $file.json ok.\n";
 	}
 	curl_close($curl);
+	ob_end_clean();
 }	
+
+function sftp_segment_upload ($container, $folder, $file) {
+/*
+Pass in destination in Object Storage that file should be uploaded to. 
+Filespit() function must be ran on $file first before calling this function, because this function will look for segment names.
+Creation of a static large object is done in several steps. 
+First we divide the content into pieces using filesplit function and upload each piece into a segment object. 
+Then we create a manifest object. We will place the segment objects into the "Segments" container and the manifest object into the "Images" container.
+*/
+	ob_start();	//using output buffer for the progress function to work
+
+	$manifest_contents = "["; //starting manifest contents json, before the loop
+
+	$ext = 1;										//setting first segment file extension	
+	$ext = str_pad($ext, 3, "0", STR_PAD_LEFT);		//padding extension to the left with zeros
+	$segment = $file . "." . $ext;			//adding extension to the file name, to be passed to fopen
+	while ($file_handle = @fopen($segment, 'r')) { /*while there are segment files in this directory*/
+
+		$filesize = shell_exec('for %I in (' . $segment . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
+		$filesize = substr($filesize, 0, -1); //removing line break from end of string
+	
+		$curloutput = fopen('curloutput.txt', 'w+');	//curloutput.txt will contain http header responses we need for manifest creation
+
+		$curl = curl_init("sftp://dal05.objectstorage.softlayer.net/Segments/$segment"); 
+
+		$curl_options = array(
+				CURLOPT_PROTOCOLS => CURLPROTO_SFTP,
+				CURLOPT_USERPWD => 'SET ME',
+				CURLOPT_UPLOAD => 1,
+				CURLOPT_INFILE => $file_handle,
+				CURLOPT_INFILESIZE => filesize("C:/Users/John/Downloads/MiroConverterSetup.exe"),
+				CURLOPT_SSL_VERIFYPEER => false,
+				CURLOPT_PROGRESSFUNCTION => 'upload_progress',
+				CURLOPT_NOPROGRESS => 0
+				);
+
+		curl_setopt_array($curl, $curl_options);
+
+		if ($filesize >= 1024 AND $filesize < 1048576) {		
+			$filesize = round(($filesize / 1024), 2) . " KB";	//converting bytes to kilobytes for output
+		}
+
+		if ($filesize >= 1048576) {
+			$filesize = round(($filesize / 1048576), 2) . " MB"; //converting bytes to megabytes for output
+		}
+
+		echo "Uploading $segment - $filesize.\n";
+		curl_exec($curl);
+
+		$time = curl_getinfo($curl, CURLINFO_TOTAL_TIME);
+		$min = round(($time / 60), 2);
+		$http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+		$size = curl_getinfo($curl, CURLINFO_SIZE_UPLOAD);	//getting uploaded bytes for use in manifest file	
+		if ( $http_code == 201) {
+			echo "Uploaded $segment ok. Uploaded $size bytes in $min minutes.\n";
+		} else {
+			echo "There was a problem uploading $segment, HTTP code $http_code.\n";
+		}
+
+		fclose($curloutput);
+		curl_close($curl);
+
+//This section the json manifest file will be created for the uploaded segments
+		$httpheader = file_get_contents("curloutput.txt");
+		$httpheader = explode("\r\n", $httpheader);	//exploding curl output into an array and getting the etag
+		$etag = substr($httpheader[3], 6);
+		$json_enc = array(	'path' => "Segments/$segment",   
+							'etag' => "$etag",
+							'size_bytes'=> "$size");
+		$json_enc = json_encode($json_enc, JSON_UNESCAPED_SLASHES);		//encoding $json_enc into json array syntax		
+		$manifest_contents .= $json_enc . ",";							//then appending to manifest contents
+
+		$ext++;									//setup of next filename to upload
+		$ext = str_pad($ext, 3, "0", STR_PAD_LEFT);
+		$segment = $file . "." . $ext;
+	}
+
+	$manifest_contents = substr($manifest_contents, 0, -1);	//takes the last comma off of the manifest contents
+	$manifest_contents .= "]";								//appends "]" onto the end of manifest for json object syntax
+	file_put_contents("$file.json", $manifest_contents);
+	$manifest = fopen("$file.json", "r");
+
+//The final operation is to upload this content into a manifest object. To indicate that this is a manifest object, you need to specify the ?multipart-manifest=put query string.
+	$curl = curl_init("$x_storage_url/$container/$folder/$file?multipart-manifest=put");
+
+	$curl_options = array(
+			CURLOPT_PUT => 1,
+			CURLOPT_INFILE => $manifest,
+			CURLOPT_INFILESIZE => filesize("$file.json"),
+			CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
+			CURLOPT_SSL_VERIFYPEER => false,
+		);
+
+	curl_setopt_array($curl, $curl_options);
+
+	curl_exec($curl);
+	if ($error = curl_error($curl)) {
+		echo "$error\n";
+	} else {
+		echo "Uploaded $file.json ok.\n";
+	}
+	curl_close($curl);
+	ob_end_clean();
+}
 
 function download($container, $folder, $file) {
 /*
@@ -190,6 +348,8 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 
 	global $x_auth_token, $x_storage_url;
 
+	ob_start(); //using output buffer so that the progress function works
+
 	$curl = curl_init("$x_storage_url/$container/$folder/$file");
 
 	$curl_options = array(
@@ -197,7 +357,9 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 			CURLOPT_SSL_VERIFYPEER => false,
 			CURLOPT_RETURNTRANSFER => 1,
 			CURLOPT_FILE => fopen("$file", "w"),
-			CURLOPT_VERBOSE => 1
+			CURLOPT_VERBOSE => 1,
+			CURLOPT_PROGRESSFUNCTION => 'download_progress',
+			CURLOPT_NOPROGRESS => 0
 		);
 
 	curl_setopt_array($curl, $curl_options);
@@ -211,6 +373,8 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 	} else {
 		echo "There was a problem with the download.\n";
 	}
+
+	ob_end_clean();
 }
 
 function delete($container, $file) {
