@@ -1,5 +1,17 @@
 <?php
 
+function cleanup() {
+/* This function is to clean up segment & json files that are created by filesplit + segment upload functions*/	
+	$dir = opendir(".");
+	while ($file = readdir($dir)) {
+		if (fnmatch("*.*.*", "$file") or fnmatch("*.json", "$file")) {
+			@unlink("$file");
+			echo "$file deleted from local storage.\n";
+		}
+	}
+	closedir();
+}
+
 function br() {
 	return (!empty($_SERVER['SERVER_SOFTWARE']))?'<br>':"\n";
 }
@@ -37,7 +49,7 @@ cUrl options set: public url to connect to, custom http headers to send (usernam
 set cUrl to accept any SSL server (SSL probz), 
 set cUrl to output http header, set cUrl to output to string instead of stdout;
 */
-	$curl = curl_init("https://dal05.objectstorage.softlayer.net/auth/v1.0/");
+	$curl = curl_init("https://dal05.objectstorage.service.networklayer.com/auth/v1.0/");
 
 	$curl_options = array (
 		CURLOPT_HTTPHEADER => array("X-Auth-User: $username", "X-Auth-Key: $password"),
@@ -116,11 +128,9 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 	$min = round(($time / 60), 2);
 	$http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 	$size = curl_getinfo($curl, CURLINFO_SIZE_UPLOAD);	//getting uploaded bytes for use in manifest file	
-	if ( $http_code == 201) {
-		echo "Uploaded $file ok. Uploaded $size bytes in $min minutes.\n";
-	} else {
-		echo "There was a problem uploading $file, HTTP code $http_code.\n";
-	}
+	if ( $error = curl_error($curl)) {
+		die ("There was a problem uploading $file, $error.\n");
+	} 
 
 	curl_close($curl);
 	ob_end_clean();
@@ -149,7 +159,7 @@ Then we create a manifest object. We will place the segment objects into the "Se
 
 		$filesize = shell_exec('for %I in (' . $segment . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
 		$filesize = substr($filesize, 0, -1);	//removing line break from end of string
-	
+
 		$curloutput = fopen('curloutput.txt', 'w+');	//curloutput.txt will contain http header responses we need for manifest creation
 
 		$curl = curl_init("$x_storage_url/Segments/$segment");
@@ -167,7 +177,7 @@ Then we create a manifest object. We will place the segment objects into the "Se
 			);
 
 		curl_setopt_array($curl, $curl_options);
-		
+
 		if ($filesize >= 1024 AND $filesize < 1048576) {		
 			$filesize = round(($filesize / 1024), 2) . " KB";	//converting bytes to kilobytes for output
 		}
@@ -183,10 +193,9 @@ Then we create a manifest object. We will place the segment objects into the "Se
 		$min = round(($time / 60), 2);
 		$http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 		$size = curl_getinfo($curl, CURLINFO_SIZE_UPLOAD);	//getting uploaded bytes for use in manifest file	
-		if ( $http_code == 201) {
-			echo "Uploaded $segment ok. Uploaded $size bytes in $min minutes.\n";
-		} else {
-			echo "There was a problem uploading $segment, HTTP code $http_code.\n";
+		if ( $errpr = curl_error($curl)) {
+			cleanup();
+			die ("There was a problem uploading $file, $error.\nHTTP code $http_code\n");
 		}
 		
 		fclose($curloutput);
@@ -195,7 +204,11 @@ Then we create a manifest object. We will place the segment objects into the "Se
 //This section the json manifest file will be created for the uploaded segments
 		$httpheader = file_get_contents("curloutput.txt");
 		$httpheader = explode("\r\n", $httpheader);	//exploding curl output into an array and getting the etag
-		$etag = substr($httpheader[3], 6);
+		$etag = substr($httpheader[5], 6);
+		if (substr($etag, 4) == ",") { //if the etag in the returned is a date, die
+			cleanup();
+			die("$segment upload failed, invalid etag returned.HTTP code $http_code\n");
+		}
 		$json_enc = array(	'path' => "Segments/$segment",   
 							'etag' => "$etag",
 							'size_bytes'=> "$size");
@@ -253,15 +266,15 @@ Then we create a manifest object. We will place the segment objects into the "Se
 	while ($file_handle = @fopen($segment, 'r')) { /*while there are segment files in this directory*/
 
 		$filesize = shell_exec('for %I in (' . $segment . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
-		$filesize = substr($filesize, 0, -1); //removing line break from end of string
-	
+		$filesize = substr($filesize, 0, -1);	//removing line break from end of string
+
 		$curloutput = fopen('curloutput.txt', 'w+');	//curloutput.txt will contain http header responses we need for manifest creation
 
-		$curl = curl_init("sftp://dal05.objectstorage.softlayer.net/Segments/$segment"); 
+		$curl = curl_init("sftp://dal05.objectstorage.service.networklayer.com/Segments/$segment");
 
 		$curl_options = array(
 				CURLOPT_PROTOCOLS => CURLPROTO_SFTP,
-				CURLOPT_USERPWD => 'SET ME',
+				CURLOPT_USERPWD => 'SLOS292387-2'. urlencode(':') .'SL292387:9f7586a9205d55cbf3d7a808f4693b8d637ef3a94984178869567671e391c9ec',
 				CURLOPT_UPLOAD => 1,
 				CURLOPT_INFILE => $file_handle,
 				CURLOPT_INFILESIZE => filesize("C:/Users/John/Downloads/MiroConverterSetup.exe"),
@@ -272,14 +285,6 @@ Then we create a manifest object. We will place the segment objects into the "Se
 
 		curl_setopt_array($curl, $curl_options);
 
-		if ($filesize >= 1024 AND $filesize < 1048576) {		
-			$filesize = round(($filesize / 1024), 2) . " KB";	//converting bytes to kilobytes for output
-		}
-
-		if ($filesize >= 1048576) {
-			$filesize = round(($filesize / 1048576), 2) . " MB"; //converting bytes to megabytes for output
-		}
-
 		echo "Uploading $segment - $filesize.\n";
 		curl_exec($curl);
 
@@ -287,10 +292,9 @@ Then we create a manifest object. We will place the segment objects into the "Se
 		$min = round(($time / 60), 2);
 		$http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 		$size = curl_getinfo($curl, CURLINFO_SIZE_UPLOAD);	//getting uploaded bytes for use in manifest file	
-		if ( $http_code == 201) {
-			echo "Uploaded $segment ok. Uploaded $size bytes in $min minutes.\n";
-		} else {
-			echo "There was a problem uploading $segment, HTTP code $http_code.\n";
+		if ( $error = curl_error($curl)) {
+			cleanup();
+			die ("There was a problem uploading $file, $error.\nHTTP code $http_code\n");
 		}
 
 		fclose($curloutput);
@@ -299,7 +303,11 @@ Then we create a manifest object. We will place the segment objects into the "Se
 //This section the json manifest file will be created for the uploaded segments
 		$httpheader = file_get_contents("curloutput.txt");
 		$httpheader = explode("\r\n", $httpheader);	//exploding curl output into an array and getting the etag
-		$etag = substr($httpheader[3], 6);
+		$etag = substr($httpheader[5], 6);
+		if (substr($etag, 4) == ",") { //if the etag in the returned is a date, die
+			cleanup();
+			die("$segment upload failed, invalid etag returned.HTTP code $http_code\n");
+		}
 		$json_enc = array(	'path' => "Segments/$segment",   
 							'etag' => "$etag",
 							'size_bytes'=> "$size");

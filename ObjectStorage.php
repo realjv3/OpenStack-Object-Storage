@@ -52,14 +52,7 @@ if ($big_files) {
 
 //cleanup: delete segment & manifest files from local directory
 
-	$dir = opendir(".");
-	while ($file = readdir($dir)) {
-		if (fnmatch("*.*.*", "$file") or fnmatch("*.json", "$file")) {
-			@unlink("$file");
-			echo "$file deleted from local storage.\n";
-		}
-	}
-	closedir();
+	cleanup();
 } else {
 	echo "No recent big files to upload.\n";
 }
