@@ -18,43 +18,48 @@ This section is setup to meet my specific needs, which are to copy daily backups
 3.) delete segment & manifest files from local directory
 */
 
-$dir_contents = scandir("D:/");	//reads contents of current directory into array
-array_shift($dir_contents);		//removes the . and the .. elements from beginning of array
-array_shift($dir_contents);
+//upload files by name
 
-//upload files that are < 5GB and modified during last 24 hours
+$files = array( "jbremote01_C_Drive009.v2i", "jbsql01_D_Drive009.v2i", "jbsql01_M_Drive009.v2i");		 //add files to array that you want to upload
 
-while ($dir_contents) {
-	$current_file = array_shift($dir_contents);
+while ($files) {
+
+	$current_file = array_shift($files);
 	
 	$filesize = shell_exec('for %I in (D:/' . $current_file . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
 	$filesize = substr($filesize, 0, -1);	//removing line break from end of string
 	
 	if ($filesize < 5000000000) {									//if filesize less than 5GB
-		if (filemtime("D:/$current_file") >= (time() - 86400) ) {	//if file modified within last 24 hours
 			$little_files[] = $current_file;
 			upload("Backups", "Images1", "$current_file");
-		}
-	} else if ($filesize > 5000000000 AND filemtime("D:/$current_file") >= (time() - 86400)){
-		$big_files[] = $current_file;
+	} else if ($filesize > 5000000000) {
+			$big_files[] = $current_file;
 	}
 }
 
-if (@!$little_files) {die("No recent files to upload.\n");}
+if (@!$little_files) echo "No little files to upload.\n";
 
-//split files larger than 5GB into 4.9GB segments, upload segments and manifest
+//split files larger than 5GB into 4.9GB s egments, upload segments and manifest
 
 if ($big_files) {
 
 	while ($big_files) {
 		$current_file = array_shift($big_files);
-		filesplit("D:/$current_file", 4900);
+		filesplit("D:/$current_file", 2000);
 		segment_upload("Backups", "Images1", "$current_file");
+		sleep(10);
 	}
 
 //cleanup: delete segment & manifest files from local directory
 
-	cleanup();
+	$dir = opendir(".");
+	while ($file = readdir($dir)) {
+		if (fnmatch("*.*.*", "$file") or fnmatch("*.json", "$file")) {
+			@unlink("$file");
+			echo "$file deleted from local storage.\n";
+		}
+	}
+	closedir();
 } else {
 	echo "No recent big files to upload.\n";
 }

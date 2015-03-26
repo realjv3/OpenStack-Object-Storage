@@ -193,7 +193,9 @@ Then we create a manifest object. We will place the segment objects into the "Se
 		$min = round(($time / 60), 2);
 		$http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 		$size = curl_getinfo($curl, CURLINFO_SIZE_UPLOAD);	//getting uploaded bytes for use in manifest file	
-		if ( $errpr = curl_error($curl)) {
+		if ( $error = curl_error($curl)) {
+			fclose($curloutput);
+			curl_close($curl);
 			cleanup();
 			die ("There was a problem uploading $file, $error.\nHTTP code $http_code\n");
 		}
@@ -246,7 +248,7 @@ Then we create a manifest object. We will place the segment objects into the "Se
 	}
 	curl_close($curl);
 	ob_end_clean();
-}	
+}			
 
 function sftp_segment_upload ($container, $folder, $file) {
 /*
@@ -277,7 +279,7 @@ Then we create a manifest object. We will place the segment objects into the "Se
 				CURLOPT_USERPWD => 'SLOS292387-2'. urlencode(':') .'SL292387:9f7586a9205d55cbf3d7a808f4693b8d637ef3a94984178869567671e391c9ec',
 				CURLOPT_UPLOAD => 1,
 				CURLOPT_INFILE => $file_handle,
-				CURLOPT_INFILESIZE => filesize("C:/Users/John/Downloads/MiroConverterSetup.exe"),
+				CURLOPT_INFILESIZE => $filesize,
 				CURLOPT_SSL_VERIFYPEER => false,
 				CURLOPT_PROGRESSFUNCTION => 'upload_progress',
 				CURLOPT_NOPROGRESS => 0
@@ -293,6 +295,8 @@ Then we create a manifest object. We will place the segment objects into the "Se
 		$http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 		$size = curl_getinfo($curl, CURLINFO_SIZE_UPLOAD);	//getting uploaded bytes for use in manifest file	
 		if ( $error = curl_error($curl)) {
+			fclose($curloutput);
+			curl_close($curl);
 			cleanup();
 			die ("There was a problem uploading $file, $error.\nHTTP code $http_code\n");
 		}
@@ -385,16 +389,16 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 	ob_end_clean();
 }
 
-function delete($container, $file) {
+function delete($file) {
 /*
-Delete a file from object storage. Pass $container and folder\$file
+Delete a file from object storage. Pass in $file as container/folder/file
 Send a http DELETE request to $x_storage_url/$container/$folder/$file.
 Send the custom http header "X-Auth-Token: $x_auth_token" along with the DELETE request.
 */
 
 	global $x_auth_token, $x_storage_url;
 
-	$curl = curl_init("$x_storage_url/$container/$file");
+	$curl = curl_init("$x_storage_url/$file");
 
 	$curl_options = array(
 			CURLOPT_CUSTOMREQUEST => "DELETE",
@@ -424,17 +428,21 @@ function list_container($container) {
 	$curl_options = array(
 			CURLOPT_HTTPHEADER => array("X-Auth-Token: $x_auth_token"),
 			CURLOPT_SSL_VERIFYPEER => false,
+			CURLOPT_RETURNTRANSFER => true
+
 		);
 
 	curl_setopt_array($curl, $curl_options);
 
-	curl_exec($curl);
+	$contents = curl_exec($curl);
 
 	if (curl_getinfo($curl, CURLINFO_HTTP_CODE) == 204) {
 		echo "Container is empty.\n";
 	}
 
 	curl_close($curl);
+
+	return $contents;
 
 }
 

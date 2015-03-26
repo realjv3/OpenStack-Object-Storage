@@ -31,12 +31,14 @@ while ($dir_contents) {
 	$filesize = substr($filesize, 0, -1);	//removing line break from end of string
 	
 	if ($filesize < 5000000000) {									//if filesize less than 5GB
-		if (filemtime("D:/$current_file") >= (time() - 86400) ) {	//if file modified within last 24 hours
+		if (filemtime("D:/$current_file") < (strtotime("March 3 2015"))) {	//if file modified on a certain date, input 2 dates after desired modified date
 			$little_files[] = $current_file;
 			upload("Backups", "Images1", "$current_file");
 		}
-	} else if ($filesize > 5000000000 AND filemtime("D:/$current_file") >= (time() - 86400)){
-		$big_files[] = $current_file;
+	} else if ($filesize > 5000000000) {
+		if (filemtime("D:/$current_file") < (strtotime("March 3 2015"))) {	//if file modified on a certain date, input 2 dates after desired modified date
+			$big_files[] = $current_file;
+		}
 	}
 }
 
@@ -48,13 +50,20 @@ if ($big_files) {
 
 	while ($big_files) {
 		$current_file = array_shift($big_files);
-		filesplit("D:/$current_file", 4900);
+		filesplit("D:/$current_file", 500);
 		segment_upload("Backups", "Images1", "$current_file");
 	}
 
 //cleanup: delete segment & manifest files from local directory
 
-	cleanup();
+	$dir = opendir(".");
+	while ($file = readdir($dir)) {
+		if (fnmatch("*.*.*", "$file") or fnmatch("*.json", "$file")) {
+			@unlink("$file");
+			echo "$file deleted from local storage.\n";
+		}
+	}
+	closedir();
 } else {
 	echo "No recent big files to upload.\n";
 }
