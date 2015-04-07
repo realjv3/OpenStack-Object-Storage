@@ -18,7 +18,7 @@ This section is setup to meet my specific needs, which are to copy daily backups
 3.) delete segment & manifest files from local directory
 */
 
-$dir_contents = scandir("D:/");	//reads contents of current directory into array
+$dir_contents = scandir("J:/Images1/");	//reads contents of current directory into array
 array_shift($dir_contents);		//removes the . and the .. elements from beginning of array
 array_shift($dir_contents);
 
@@ -27,16 +27,16 @@ array_shift($dir_contents);
 while ($dir_contents) {
 	$current_file = array_shift($dir_contents);
 	
-	$filesize = shell_exec('for %I in (D:/' . $current_file . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
+	$filesize = shell_exec('for %I in (J:/Images1/' . $current_file . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
 	$filesize = substr($filesize, 0, -1);	//removing line break from end of string
 	
 	if ($filesize < 5000000000) {									//if filesize less than 5GB
-		if (filemtime("D:/$current_file") < (strtotime("March 3 2015"))) {	//if file modified on a certain date, input 2 dates after desired modified date
+		if (filemtime("J:/Images1/$current_file") < (strtotime("March 3 2015"))) {	//if file modified on a certain date, input 2 dates after desired modified date
 			$little_files[] = $current_file;
 			upload("Backups", "Images1", "$current_file");
 		}
 	} else if ($filesize > 5000000000) {
-		if (filemtime("D:/$current_file") < (strtotime("March 3 2015"))) {	//if file modified on a certain date, input 2 dates after desired modified date
+		if (filemtime("J:/Images1/$current_file") < (strtotime("March 3 2015"))) {	//if file modified on a certain date, input 2 dates after desired modified date
 			$big_files[] = $current_file;
 		}
 	}
@@ -50,7 +50,7 @@ if ($big_files) {
 
 	while ($big_files) {
 		$current_file = array_shift($big_files);
-		filesplit("D:/$current_file", 500);
+		filesplit("J:/Images1/$current_file", 500);
 		segment_upload("Backups", "Images1", "$current_file");
 	}
 

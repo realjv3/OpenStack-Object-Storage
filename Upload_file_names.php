@@ -20,13 +20,13 @@ This section is setup to meet my specific needs, which are to copy daily backups
 
 //upload files by name
 
-$files = array( "jbremote01_C_Drive009.v2i", "jbsql01_D_Drive009.v2i", "jbsql01_M_Drive009.v2i");		 //add files to array that you want to upload
+$files = array( "jbsql01_C_Drive010.v2i", "jbsql01_D_Drive010.v2i", "jbsql01_M_Drive010.v2i", "jbremote01_C_Drive010.v2i");		 //add files to array that you want to upload
 
 while ($files) {
 
 	$current_file = array_shift($files);
 	
-	$filesize = shell_exec('for %I in (D:/' . $current_file . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
+	$filesize = shell_exec('for %I in (J:/Images1/' . $current_file . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
 	$filesize = substr($filesize, 0, -1);	//removing line break from end of string
 	
 	if ($filesize < 5000000000) {									//if filesize less than 5GB
@@ -45,7 +45,7 @@ if ($big_files) {
 
 	while ($big_files) {
 		$current_file = array_shift($big_files);
-		filesplit("D:/$current_file", 2000);
+		filesplit("J:/Images1/$current_file", 2000);
 		segment_upload("Backups", "Images1", "$current_file");
 		sleep(10);
 	}
