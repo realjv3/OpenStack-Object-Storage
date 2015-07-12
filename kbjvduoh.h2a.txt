@@ -1,0 +1,40 @@
+﻿Refactored to feature web based ajax GUI; using MVC, SOLID principles for objected oriented code
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+# On branch master
+# Your branch is up-to-date with 'origin/master'.
+#
+# Changes to be committed:
+#	new file:   assets/images/Background.jpg
+#	new file:   assets/images/FreeVector-Interface-Buttons-Vector.jpg
+#	new file:   assets/images/canvas.jpg
+#	new file:   assets/images/file.png
+#	new file:   assets/images/folder.png
+#	new file:   assets/images/openstack.jpg
+#	new file:   assets/images/openstack_icon.png
+#	new file:   assets/images/up.png
+#	new file:   assets/images/uploading.gif
+#	new file:   assets/js/UIajax.js
+#	new file:   assets/styles.css
+#	new file:   controller/browse.php
+#	new file:   controller/classes.php
+#	new file:   controller/delete.php
+#	new file:   controller/download.php
+#	new file:   controller/interfaces.php
+#	new file:   controller/login.php
+#	new file:   controller/logout.php
+#	new file:   controller/upload.php
+#	new file:   includes/init.php
+#	new file:   index.php
+#	new file:   scratch.php
+#	new file:   view/classes.php
+#	new file:   view/interfaces.php
+#
+# Changes not staged for commit:
+#	deleted:    Delete_aged_files.php
+#	deleted:    ObjectStorage.php
+#	deleted:    Upload_date_range.php
+#	deleted:    Upload_file_names.php
+#	deleted:    functions.php
+#
+
