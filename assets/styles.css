@@ -1,0 +1,83 @@
+h1, h2, h3, h4, h5, p, a, form, legend {
+	font-family: 'Roboto', sans-serif;
+	text-decoration:none;
+}
+
+a:visited { text-decoration: none; color:black; }
+a:hover { text-decoration: none; color:black; }
+a:focus { text-decoration: none; color:black; }
+a:hover, a:active { text-decoration: none; color:black }
+
+header {
+	min-height: 27vh;
+	margin: 1vh;
+	background: url('/assets/images/openstack.jpg');
+	background-repeat: no-repeat;
+}
+
+header h1 {
+	font-size: 2vw;
+	text-align: center;
+	vertical-align: top;
+}
+
+#login {
+	float: right;
+}
+
+#model {
+	display: inline-block;
+	border-style: solid;
+	padding: 1vh;
+	width: auto;
+	vertical-align: top;
+}
+
+.containers, .folders, .files {
+	border-style: inset;
+	border-width: 1px;
+	margin: 1px;
+	background: #E2E2E2;
+	width: auto;
+	min-height: 25px;
+	min-width: 17vw;
+}
+
+.name {
+	display: inline;
+}
+
+#view {
+	display: inline-block;
+	border-style: solid;
+	vertical-align: top;
+	width: auto;
+	min-width: 33vw;
+	visibility: hidden;
+}
+
+
+#controlpanel {
+	display: inline-block;
+	border-style: solid;
+	padding: 1vh;
+	width: 33vw;
+	vertical-align: top;
+}
+
+.controls {
+	visibility: hidden;
+}
+
+legend {
+	font-size: large;
+}
+
+fieldset {
+	background-color: #ddd;
+	overflow: auto;
+}
+
+input {
+	margin: 1vh;
+}
