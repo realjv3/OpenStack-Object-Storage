@@ -90,13 +90,13 @@ Set cUrl to accept any SSL server (SSL probz). Send the custom http header "X-Au
 
 	ob_start(); //using output buffer for the progress function to work
 
-	if (!is_readable("D:/$file")) {
+	if (!is_readable("J:/Images1/$file")) {
 		echo "$file is not readable.\n";
 	} else {			
-			$file_handle = fopen("D:/$file", "r");
+			$file_handle = fopen("J:/Images1/$file", "r");
 	}
 	
-	$filesize = shell_exec('for %I in (D:/' . $file . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
+	$filesize = shell_exec('for %I in (J:/Images1/' . $file . ') do @echo %~zI'); //using a shell command to get bytes b/c filesize() doesn't work > 2GB
 	$filesize = substr($filesize, 0, -1);	//removing line break from end of string
 
 	$curl = curl_init("$x_storage_url/$container/$folder/$file");
