@@ -2,7 +2,9 @@
 
 namespace view;
 
-require_once $_SERVER['DOCUMENT_ROOT'] . "/view/interfaces.php";
+require_once $_SERVER['DOCUMENT_ROOT'] . "../interfaces/renderer.php";
+
+
 
 class fs_renderer implements renderer
 {
